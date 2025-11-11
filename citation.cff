@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+title: "1D Inversion of Time-Domain Electromagnetic Data with Induced Polarization Effects for a Sea-Floor Hydrothermal Deposit"
+authors:
+  - family-names: Motoori
+    given-names: Masayuki
+  - family-names: Heagy
+    given-names: Lindsey
+  - family-names: Hoshino
+    given-names: Gaku
+  - family-names: Yamamoto
+    given-names: Koji
+  - family-names: Morozumi
+    given-names: Hiroshi
+  - family-names: Nagase
+    given-names: Kenta
+  - family-names: Sugimoto
+    given-names: Sho
+date-released: 2025
+preferred-citation:
+  type: conference-paper
+  authors:
+    - family-names: Motoori
+      given-names: Masayuki
+    - family-names: Heagy
+      given-names: Lindsey
+    - family-names: Hoshino
+      given-names: Gaku
+    - family-names: Yamamoto
+      given-names: Koji
+    - family-names: Morozumi
+      given-names: Hiroshi
+    - family-names: Nagase
+      given-names: Kenta
+    - family-names: Sugimoto
+      given-names: Sho
+  title: "1D Inversion of Time-Domain Electromagnetic Data with Induced Polarization Effects for a Sea-Floor Hydrothermal Deposit"
+  conference: "NSG 2025: 6th Conference on Geophysics for Mineral Exploration and Mining"
+  location: "Naples, Italy"
+  publisher:
+    name: "European Association of Geoscientists & Engineers (EAGE)"
+  year: 2025
+  start: 1
+  end: 5
+  doi: "10.3997/2214-4609.202520037"
+  url: "https://doi.org/10.3997/2214-4609.202520037"
