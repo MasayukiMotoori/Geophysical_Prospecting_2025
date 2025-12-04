@@ -2769,8 +2769,12 @@ class TEM_Signal_Process:
         self.smp_freq = smp_freq
         self.time_step = 1./smp_freq
         if self.on_time is None:
-            self.times_rec  = np.arange(0, rec_time, self.time_step) + self.time_step
-            self.times_filt = np.arange(0, rec_time, self.time_step)
+            self.ntime = int(self.rec_time*self.smp_freq)
+            self.times_filt = np.linspace(0, self.rec_time, self.ntime, endpoint=False)
+            self.times_rec = self.times_filt + self.time_step
+            # self.times_rec  = np.arange(0, rec_time, self.time_step) + self.time_step
+            # self.times_filt = np.arange(0, rec_time, self.time_step)
+            
         else:
             assert self.on_time >= self.rmp_time, "on_time must be greater than or equal to rmp_time"
             self.times_rec  = np.arange(0, rec_time+on_time,self.time_step) + self.time_step
@@ -2905,7 +2909,7 @@ class TEM_Signal_Process:
         time_step = self.get_param(time_step, self.time_step)
         times_filt = self.times_filt
         filter_linrmp = np.zeros_like(times_filt)
-        inds_rmp = times_filt <= rmp_time
+        inds_rmp = times_filt < rmp_time -eps
         filter_linrmp[inds_rmp] =   1.0/float(inds_rmp.sum())
         return filter_linrmp
 
@@ -2932,6 +2936,16 @@ class TEM_Signal_Process:
         inds_rmp = self.times_filt <= self.rmp_time
         self.waveform_dIdt[inds_rmp] =   1.0/float(inds_rmp.sum())
         return self.waveform_dIdt
+
+    def waveform_dIdt_rectangle(self, on_time, rmp_on=None ):
+        assert self.on_time is not None, "on time value is required"
+        filter_rectangle = np.zeros_like(self.times_filt)
+        if rmp_on is not None:
+            inds_rmp_on = self.times_filt <= rmp_on
+            filter_rectangle[inds_rmp_on] =   -1.0/float(inds_rmp_on.sum())
+        inds_rmp_off = (self.times_filt > on_time) & (self.times_filt <= self.rmp_time + on_time)
+        filter_rectangle[inds_rmp_off] =   1.0/float(inds_rmp_off.sum())
+        return filter_rectangle
 
     def filter_linear_rmp_rect(self, rmp_time=None):
         if rmp_time is None:
