@@ -40,6 +40,33 @@ class TorchHelper:
             return torch.from_numpy(x).to(dtype=dtype, device=device)
         else:
             return torch.tensor(x, dtype=dtype, device=device)
+    @staticmethod
+    def to_numpy_r(x):
+        """
+        Convert to numpy and FORCE real values.
+        Imaginary part is explicitly discarded.
+        """
+        if isinstance(x, torch.Tensor):
+            x = x.detach().cpu().numpy()
+        else:
+            x = np.asarray(x)
+
+        # Explicitly handle complex numbers
+        if np.iscomplexobj(x):
+            return np.real(x)
+        else:
+            return x.astype(float)
+
+    @staticmethod
+    def to_numpy_c(x):
+        """
+        Convert to numpy, preserving complex values if present.
+        """
+        if isinstance(x, torch.Tensor):
+            return x.detach().cpu().numpy()
+        else:
+            return np.asarray(x)
+
 
 class Pelton_res_f():
     def __init__(self, freq=None, con=False,
@@ -232,6 +259,24 @@ $$
         else:
             proj_x = x
         return proj_x
+
+    def plot_etas(self, mvec, ax=None, **kwargs):
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        etas = TorchHelper.to_numpy_r(mvec[1:])
+        ax.semilogx(self.taus, etas, **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\eta_k$")
+        return ax
+
+    def plot_etas_cum(self, mvec, ax=None, **kwargs):
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        etas = TorchHelper.to_numpy_r(mvec[1:])
+        ax.semilogx(self.taus, np.cumsum(etas), **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\Sigma\!_{j,k}\,\eta_j$")
+        return ax
 
 class DDR_Sum_Ser_f(DDR_f):
     """Alias for DDR_f with a specific name."""
@@ -948,7 +993,162 @@ class InducedPolarizationSimulation(BaseSimulation):
 
     def project_convex_set(self,m):
         return self.ip_model.clip_model(m).detach().requires_grad_(False)
+    
+    def plot_sip_model(self, model, res=True, ax=None, magphs=True, deg=True,**kwargs):
+        model = TorchHelper.to_tensor_r(model)
+        dpred = self.dpred(model)
+        if magphs:
+            axtmp = [None, None, None, ax[0], ax[1], None]
+        else:
+            axtmp = ax
+        if res:
+            axtmp = self.plot_sip_dpred_res(dpred, ax=axtmp, **kwargs)
+        else:
+            axtmp = self.plot_sip_dpred_con(dpred, ax=axtmp, **kwargs)
+        if magphs:
+            ax = [axtmp[3], axtmp[4]]
+        else:
+            ax = axtmp 
+        return ax
 
+    def plot_sip_dpred_res(self, dpred,  deg=True, ax=None, **kwargs):
+        """
+        Plot SIP given data of resistivity form
+        dpred: torch.Tensor, transformed to numpy for plotting
+        ax: sequence of matplotlib Axes (len>=5) or None
+            ax[0]: real part in resistivity vs freq
+            ax[1]: imag part in resistivity vs freq
+            ax[2]: imag part in conductivity vs freq
+            ax[3]: abs   in resistivity vs freq
+            ax[4]: phase in resistivity vs freq
+            ax[5]: Cole-Cole (imag vs real)
+        """
+        if ax is None:
+            fig, ax = plt.subplots(3, 2, figsize=(11, 9))
+            ax = ax.ravel()
+        else:
+            # accept single Axes, 2D array, list/tuple
+            ax = np.asarray(ax, dtype=object).ravel()
+
+        if ax.size < 6:
+            raise ValueError(f"Need at least 6 axes (got {ax.size}).")
+        dpred_np = TorchHelper.to_numpy_c(dpred)
+        freq = TorchHelper.to_numpy_r(self.ip_model.freq)
+        nfreq = freq.shape[0]
+
+        sip_real = dpred_np[:nfreq]
+        sip_imag = dpred_np[nfreq:nfreq*2]  # safer if dpred has extra stuff
+        z = sip_real + 1j * sip_imag
+        a = 1.0 / z
+        sip_abs = np.abs(z)
+        sip_phs = np.angle(z, deg=deg)
+        if deg is False:
+            sip_phs *= 1000 # convert to mrad
+        # Frequency-domain plots
+        freq_axes = [0, 1, 2, 3, 4]
+        if ax[0] is not None:
+            ax[0].semilogx(freq, sip_real, **kwargs)
+            ax[0].set_ylabel(r"Re($\rho^*$)  ($\Omega$m)")
+        if ax[1] is not None:
+            ax[1].semilogx(freq, sip_imag, **kwargs)
+            ax[1].set_ylabel(r"Im($\rho^*$)  ($\Omega$m)")
+            ax[1].set_ylim(top=0)  # resistivity imaginary part is negative
+
+        if ax[2] is not None:
+            ax[2].semilogx(freq, a.imag, **kwargs)
+            ax[2].set_ylabel(r"Im($\sigma^*$)  (S/m)")
+            ax[2].set_ylim(bottom=0)  # conductivity imaginary part is positive
+        if ax[3] is not None:
+            ax[3].semilogx(freq, sip_abs, **kwargs)
+            ax[3].set_ylabel(r"Amplitude ($\Omega$m)")
+        if ax[4] is not None:
+            ax[4].semilogx(freq, sip_phs, **kwargs)
+            if deg:
+                ax[4].set_ylabel("Phase (deg)")
+            else:
+                ax[4].set_ylabel("Phase (mrad)")
+
+        for i in freq_axes:
+            if ax[i] is not None:
+                ax[i].set_xlabel("Frequency (Hz)")
+
+        # Cole–Cole
+        if ax[5] is not None:
+            ax[5].plot(sip_real, sip_imag, **kwargs)
+            ax[5].set_xlabel(r"Re($\rho^*$)  ($\Omega$m)")
+            ax[5].set_ylabel(r"Im($\rho^*$)  ($\Omega$m)")
+            ax[5].axis("equal")  # optional, often nice
+        return ax
+
+    def plot_sip_dpred_con(self, dpred, deg=True, ax=None, **kwargs):
+        """
+        Plot SIP given data of conductivity form
+        dpred: torch.Tensor, transformed to numpy for plotting
+        ax: sequence of matplotlib Axes (len>=5) or None
+            ax[0]: real part in conductivity vs freq
+            ax[1]: imag part in conductivity vs freq
+            ax[2]: imag part in resistivity vs freq
+            ax[3]: abs   in conductivity vs freq
+            ax[4]: phase in conductivity vs freq
+            ax[5]: Cole-Cole (imag vs real)
+        """
+        if ax is None:
+            fig, ax = plt.subplots(3, 2, figsize=(11, 9))
+            ax = ax.ravel()
+        else:
+            # accept single Axes, 2D array, list/tuple
+            ax = np.asarray(ax, dtype=object).ravel()
+
+        if ax.size < 6:
+            raise ValueError(f"Need at least 6 axes (got {ax.size}).")
+        dpred_np = TorchHelper.to_numpy_c(dpred)
+        freq = TorchHelper.to_numpy_r(self.ip_model.freq)
+        nfreq = freq.shape[0]
+
+        sip_real = dpred_np[:nfreq]
+        sip_imag = dpred_np[nfreq:nfreq*2]  # safer if dpred has extra stuff
+        a = sip_real + 1j * sip_imag
+        z = 1.0 / a
+        sip_abs = np.abs(a)
+        sip_phs = np.angle(z, deg=deg)
+        if deg is False:
+            sip_phs *= 1000 # convert to mrad
+        # Frequency-domain plots
+        freq_axes = [0, 1, 2, 3, 4]
+        if ax[0] is not None:
+            ax[0].semilogx(freq, sip_real, **kwargs)
+            ax[0].set_ylabel(r"Re($\sigma^*$)  (S/m)")
+        if ax[1] is not None:
+            ax[1].semilogx(freq, sip_imag, **kwargs)
+            ax[1].set_ylabel(r"Im($\sigma^*$)  (S/m)")
+            ax[1].set_ylim(bottom=0)  # conductivity imaginary part is positive
+        if ax[2] is not None:
+            ax[2].semilogx(freq, z.imag, **kwargs)
+            ax[2].set_ylabel(r"Im($\rho^*$)  ($\Omega\cdot$m)")
+            ax[2].set_ylim(top=0)  # resistivity imaginary part is negative
+
+        if ax[3] is not None:
+            ax[3].semilogx(freq, sip_abs, **kwargs)
+            ax[3].set_ylabel(r"|$\sigma^*$|  (S/m)")
+        if ax[4] is not None:
+            ax[4].semilogx(freq, sip_phs, **kwargs)
+            if deg:
+                ax[4].set_ylabel("Phase (deg)")
+            else:
+                ax[4].set_ylabel("Phase (mrad)")
+
+        for i in freq_axes:
+            if ax[i] is not None:
+                ax[i].set_xlabel("Frequency (Hz)")
+
+        # Cole–Cole
+        if ax[5] is not None:
+            ax[5].plot(sip_real, sip_imag, **kwargs)
+            ax[5].set_xlabel(r"Re($\sigma^*$)  (S/m)")
+            ax[5].set_ylabel(r"Im($\sigma^*$)  (S/m)")
+            ax[5].axis("equal")  # optional, often nice
+        return ax
+    
 class Optimization():  # Inherits from BaseSimulation
     def __init__(self,
                 sim,
@@ -999,7 +1199,7 @@ class Optimization():  # Inherits from BaseSimulation
     def loss_func_L2(self,m, beta, m_ref=None):
         r = self.dpred(m)-self.dobs
         r = self.Wd @ r
-        phid = 0.5 * torch.sum(r**2)
+        phid = torch.sum(r**2)
         phim = 0
         if m_ref is not None:
             rms = self.Ws @ (m - m_ref)
@@ -1013,7 +1213,7 @@ class Optimization():  # Inherits from BaseSimulation
         dpred_m = self.dpred(m)
         r = dpred_m-self.dobs
         r = self.Wd @ r
-        phid = 0.5 * torch.sum(r**2)
+        phid = torch.sum(r**2)
         phim = 0
         if m_ref is not None:
             rms = self.Ws @ (m - m_ref)
@@ -1029,7 +1229,7 @@ class Optimization():  # Inherits from BaseSimulation
             self.update_Ws(self.Wd@Jmat)
         dpred_m = self.dpred(m)            
         rd = self.Wd @ (dpred_m -self.dobs)
-        phid = 0.5 * torch.sum(rd**2)
+        phid = torch.sum(rd**2)
         H = Jmat.T @ self.Wd.T@ self.Wd@Jmat
         phim = 0
         if m_ref is not None:
@@ -1049,7 +1249,7 @@ class Optimization():  # Inherits from BaseSimulation
         dpred_m = self.dpred(m)
         r = dpred_m-self.dobs
         r = self.Wd @ r
-        phid = 0.5 * torch.sum(r**2)
+        phid = torch.sum(r**2)
         phim = 0
         if m_ref is not None:
             rms = self.Ws @ (m - m_ref)
@@ -1065,7 +1265,7 @@ class Optimization():  # Inherits from BaseSimulation
         if update_Wsen:
             self.update_Ws(self.Wd@Jmat)
         rd = self.Wd @ (dpred_m -self.dobs)
-        phid = 0.5 * torch.sum(rd**2)
+        phid = torch.sum(rd**2)
         H = Jmat.T @ self.Wd.T@ self.Wd@Jmat
         phim = 0
         if m_ref is not None:
@@ -1086,7 +1286,7 @@ class Optimization():  # Inherits from BaseSimulation
     def loss_func_Jacobian_proj(self,m,m_ref=None):
         dpred_m = self.dpred(m)            
         rd = self.Wd @ (dpred_m -self.dobs)
-        phid = 0.5 * torch.sum(rd**2)
+        phid = torch.sum(rd**2)
         phim = 0
         if m_ref is not None:
             rms = self.Ws @ (m - m_ref)
@@ -1104,7 +1304,7 @@ class Optimization():  # Inherits from BaseSimulation
         if update_Wsen:
             self.update_Ws(WdJ)
         rd = self.Wd @ (dpred_m -self.dobs)
-        phid = 0.5 * torch.sum(rd**2)
+        phid = torch.sum(rd**2)
         H = WdJ.T@ WdJ
         g = WdJ.T@ rd
         phim = 0
@@ -1385,3 +1585,14 @@ class Optimization():  # Inherits from BaseSimulation
                 print(f'{i + 1:3}, beta:{self.beta:.1e}, step:{s:.1e}, gradient:{g_norm:.1e}, f:{f_new:.1e}')
         return mvec_new
     
+def enforce_descending_x(ax):
+    ax.invert_xaxis()                      # just flip direction
+    ax.autoscale(enable=True, axis="x")    # keep autoscale ON for later overlays
+    return ax
+
+
+def enforce_negative_up(ax):
+    ax.invert_yaxis()
+    ax.autoscale(enable=True, axis="y")
+    return ax
+

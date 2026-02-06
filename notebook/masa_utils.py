@@ -1544,12 +1544,12 @@ class DDR_f():
         display(Markdown(r"""
 ### Debye Decomposition Resistivity Model in frequency domain
 $$
-\rho(\omega)=\rho_0 \left[1-\sum_{j=1}^n \eta_j \left(1- \dfrac{1}{1+i\omega\tau_j}\right)\right]
+\rho(\omega)=\rho_0 \left[1-\sum_{k=1}^n \eta_k \left(1- \dfrac{1}{1+i\omega\tau_k}\right)\right]
 $$
 
 - $\rho_0$: Resistivity at low frequency ($\Omega\,$m)
-- $\eta_j$: Chargeabilities (dimensionless)  
-- $\tau_j$: Time constants (s)  
+- $\eta_k$: Chargeabilities (dimensionless)  
+- $\tau_k$: Time constants (s)  
 - $n$: Total number of relaxation
 """))
         
@@ -1601,6 +1601,17 @@ $$
             grad *= -f**2 # C' = (1/Z)' = -Z'/Z**2 = -Z'*C**2 
         return grad 
 
+    def mean_log_tau(self,p):
+        """
+        Return mean logarithmic relaxation time
+        p[0]        : log(res0)
+        p[1:1+ntaus]: etas 
+        $\tau_{mean} = exp \left (\frac{\sum_{k=1}^{n}\eta_k \log{\tau_k}}{\sum_{k=1}^{n}\eta_k} \right)$
+        """
+        etas=p[1:1+self.ntau]
+        assert len(etas) == self.ntau, "Number of etas must match number of taus"
+        return np.exp(np.sum(etas * np.log(self.taus)) / np.sum(etas))
+
     def clip_model(self,mvec):
         mvec_tmp = mvec.copy()
         ind_res = 0
@@ -1616,11 +1627,28 @@ $$
         proj_x = x + a * ((b - np.dot(a, x)) / np.dot(a, a)) if np.dot(a, x) > b else x
         return proj_x
     
+    def plot_etas(self, mvec, ax=None, **kwargs):
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        ax.semilogx(self.taus, mvec[1:], **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\eta_k$")
+        return ax
+
+    def plot_etas_cum(self, mvec, ax=None, **kwargs):
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        ax.semilogx(self.taus, np.cumsum(mvec[1:]), **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\Sigma\!_{j,k}\,\eta_j$")
+        return ax
+    
     def get_rho_eta(self,mvec):
         # just return resistivity and sum of chargeabilities
-        rho = np.exp(mvec[0])
-        eta_sum = mvec[1:1+self.ntau].sum()
-        return rho, eta_sum
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        return np.exp(mvec[0]), mvec[1:1+self.ntau].sum()
 
 class DDR_MPA_f():
     def __init__(self,
@@ -1712,11 +1740,29 @@ $$
         proj_x = x + a * ((b - np.dot(a, x)) / np.dot(a, a)) if np.dot(a, x) > b else x
         return proj_x
     
+    def plot_etas(self, mvec, ax=None, **kwargs):
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        ax.semilogx(self.taus, mvec[1:], **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\eta_k$")
+        return ax
+
+    def plot_etas_cum(self, mvec, ax=None, **kwargs):
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        ax.semilogx(self.taus, np.cumsum(mvec[1:]), **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\Sigma\!_{j,k}\,\eta_j$")
+        return ax
+    
     def get_rho_eta(self,mvec):
         # just return resistivity and sum of chargeabilities
-        rho = np.exp(mvec[0])
-        eta_sum = mvec[1:1+self.ntau].sum()
-        return rho, eta_sum
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        return np.exp(mvec[0]), mvec[1:1+self.ntau].sum()
+
 class Debye_decmp_res_t:
     def __init__(self,
                  times=None, tstep=None,taus= None, 
@@ -1960,6 +2006,29 @@ $$
     def proj_halfspace(self, x, a, b):
         proj_x = x + a * ((b - np.dot(a, x)) / np.dot(a, a)) if np.dot(a, x) > b else x
         return proj_x
+    
+    def plot_etas(self, mvec, ax=None, **kwargs):
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        ax.semilogx(self.taus, mvec[1:], **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\eta_k$")
+        return ax
+
+    def plot_etas_cum(self, mvec, ax=None, **kwargs):
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        if ax is None: 
+            fig, ax = plt.subplots(1, 1, figsize=(5,3))
+        ax.semilogx(self.taus, np.cumsum(mvec[1:]), **kwargs)
+        ax.set_xlabel(r"$\tau_k$ [s]")
+        ax.set_ylabel(r"$\Sigma\!_{j,k}\,\eta_j$")
+        return ax
+    
+    def get_rho_eta(self,mvec):
+        # just return resistivity and sum of chargeabilities
+        assert len(mvec) == 1 + self.ntau, "Number of parameters must match number of taus"
+        return np.exp(mvec[0]), mvec[1:1+self.ntau].sum()
 
 class Debye_decmp_con_f(DDC_f):
     """Alias for Debye_sum_t with a specific name."""
@@ -2091,7 +2160,6 @@ class InducedPolarizationSimulation(BaseSimulation):
         """"
         Retursn two arrays
         1. J_pro: the projection of the eta vectors on the resistivity vector, normalized
-        2. etas_norm: the norm of the eta vectors, normalized by the norm of Jacobian matrix
         """
         J_0 = J[:,0]
         J_0_norm = np.linalg.norm(J_0)
@@ -2101,7 +2169,167 @@ class InducedPolarizationSimulation(BaseSimulation):
             J_i_norm = np.linalg.norm(J_i)
             J_prd[i] = np.dot(J_0, J_i)/J_i_norm/ J_0_norm
         return J_prd
-    
+
+    def plot_sip_model(self, model, ax=None, res=True, magphs=True, deg=True,
+                       **kwargs):
+        dpred = self.dpred(model)
+        if magphs:
+            axtmp = [None, None, None, ax[0], ax[1], None]
+        else:
+            axtmp = ax
+        if res:
+            axtmp = self.plot_sip_dpred_res(dpred, deg=deg, ax=axtmp, **kwargs)
+        else:
+            axtmp = self.plot_sip_dpred_con(dpred, deg=deg, ax=axtmp, **kwargs)
+        if magphs:
+            ax = [axtmp[3], axtmp[4]]
+        else:
+            ax = axtmp
+        return ax
+
+    def plot_sip_dpred_res(self, dpred, deg=True, ax=None, **kwargs):
+        """
+        Plot SIP given data of resistivity form
+        dpred: numpy array with size 2*nfreq
+        dpred[0:nf]: real part
+        dpred[nf:2*nf]: imag part
+        ax: sequence of matplotlib Axes (len>=5) or None
+            ax[0]: real part in resistivity vs freq
+            ax[1]: imag part in resistivity vs freq
+            ax[2]: imag part in conductivity vs freq
+            ax[3]: abs   in resistivity vs freq
+            ax[4]: phase in resistivity vs freq
+            ax[5]: Cole-Cole (imag vs real)
+        """
+        if ax is None:
+            fig, ax = plt.subplots(3, 2, figsize=(11, 9))
+            ax = ax.ravel()
+        else:
+            # accept single Axes, 2D array, list/tuple
+            ax = np.asarray(ax, dtype=object).ravel()
+
+        if ax.size < 6:
+            raise ValueError(f"Need at least 6 axes (got {ax.size}).")
+        freq = self.ip_model.freq
+        nfreq = freq.shape[0]
+
+        sip_real = dpred[:nfreq]
+        sip_imag = dpred[nfreq:nfreq*2]  # safer if dpred has extra stuff
+        z = sip_real + 1j * sip_imag
+        a = 1.0 / z
+        sip_abs = np.abs(z)
+        sip_phs = np.angle(z, deg=deg)
+        if deg is False:
+            sip_phs *= 1000 # convert to mrad
+        # Frequency-domain plots
+        freq_axes = [0, 1, 2, 3, 4]
+        if ax[0] is not None:
+            ax[0].semilogx(freq, sip_real, **kwargs)
+            ax[0].set_ylabel(r"Re($\rho^*$)  ($\Omega$m)")
+        if ax[1] is not None:
+            ax[1].semilogx(freq, sip_imag, **kwargs)
+            ax[1].set_ylabel(r"Im($\rho^*$)  ($\Omega$m)")
+            ax[1].set_ylim(top=0)  # resistivity imaginary part is negative
+            ax[1] = enforce_negative_up(ax[1])
+        if ax[2] is not None:
+            ax[2].semilogx(freq, a.imag, **kwargs)
+            ax[2].set_ylabel(r"Im($\sigma^*$)  (S/m)")
+            ax[2].set_ylim(bottom=0)  # conductivity imaginary part is positive
+        if ax[3] is not None:
+            ax[3].semilogx(freq, sip_abs, **kwargs)
+            ax[3].set_ylabel(r"Amplitude ($\Omega$m)")
+        if ax[4] is not None:
+            ax[4].semilogx(freq, sip_phs, **kwargs)
+            if deg:
+                ax[4].set_ylabel("Phase (deg)")
+            else:
+                ax[4].set_ylabel("Phase (mrad)")
+
+        for i in freq_axes:
+            if ax[i] is not None:
+                ax[i].set_xlabel("Frequency (Hz)")
+
+        # Cole–Cole
+        if ax[5] is not None:
+            ax[5].plot(sip_real, sip_imag, **kwargs)
+            ax[5].set_xlabel(r"Re($\rho^*$)  ($\Omega$m)")
+            ax[5].set_ylabel(r"Im($\rho^*$)  ($\Omega$m)")
+            ax[5].axis("equal")  # optional, often nice
+        return ax
+
+    def plot_sip_dpred_con(self, dpred, deg=True, ax=None, **kwargs):
+        """
+        Plot SIP given data of conductivity form
+        dpred: numpy array with size 2*nfreq
+        dpred[0:nf]: real part
+        dpred[nf:2*nf]: imag part
+        ax: sequence of matplotlib Axes (len>=5) or None
+            ax[0]: real part in conductivity vs freq
+            ax[1]: imag part in conductivity vs freq
+            ax[2]: imag part in resistivity vs freq
+            ax[3]: abs   in conductivity vs freq
+            ax[4]: phase in conductivity vs freq
+            ax[5]: Cole-Cole (imag vs real)
+        """
+        if ax is None:
+            fig, ax = plt.subplots(3, 2, figsize=(11, 9))
+            ax = ax.ravel()
+        else:
+            # accept single Axes, 2D array, list/tuple
+            ax = np.asarray(ax, dtype=object).ravel()
+
+        if ax.size < 6:
+            raise ValueError(f"Need at least 6 axes (got {ax.size}).")
+        freq = self.ip_model.freq
+        nfreq = freq.shape[0]
+
+        sip_real = dpred[:nfreq]
+        sip_imag = dpred[nfreq:nfreq*2]  # safer if dpred has extra stuff
+        a = sip_real + 1j * sip_imag
+        z = 1.0 / a
+        sip_abs = np.abs(a)
+        sip_phs = np.angle(a, deg=deg)
+        if deg is False:
+            sip_phs *= 1000 # convert to mrad
+
+        # Frequency-domain plots
+        freq_axes = [0, 1, 2, 3, 4]
+        if ax[0] is not None:
+            ax[0].semilogx(freq, sip_real, **kwargs)
+            ax[0].set_ylabel(r"Re($\sigma^*$)  (S/m)")
+        if ax[1] is not None:
+            ax[1].semilogx(freq, sip_imag, **kwargs)
+            ax[1].set_ylabel(r"Im($\sigma^*$)  (S/m)")
+            ax[1].set_ylim(bottom=0)  # conductivity imaginary part is positive
+        if ax[2] is not None:
+            ax[2].semilogx(freq, z.imag, **kwargs)
+            ax[2].set_ylabel(r"Im($\rho^*$)  ($\Omega$m)")
+            ax[2].set_ylim(top=0)  # resistivity imaginary part is negative
+
+        if ax[3] is not None:
+            ax[3].semilogx(freq, sip_abs, **kwargs)
+            ax[3].set_ylabel(r"|$\sigma^*$|  (S/m)")
+        if ax[4] is not None:
+            ax[4].semilogx(freq, sip_phs, **kwargs)
+            ax[4].set_ylim(bottom=0)  # conductivity phase is positive
+            if deg:
+                ax[4].set_ylabel('Phase (deg)')
+            else:
+                ax[4].set_ylabel('Phase (mrad)')
+
+        for i in freq_axes:
+            if ax[i] is not None:
+                ax[i].set_xlabel("Frequency (Hz)")
+
+        # Cole–Cole
+        if ax[5] is not None:
+            ax[5].plot(sip_real, sip_imag, **kwargs)
+            ax[5].set_xlabel(r"Re($\sigma^*$)  (S/m)")
+            ax[5].set_ylabel(r"Im($\sigma^*$)  (S/m)")
+            ax[5].axis("equal")  # optional, often nice
+        return ax
+
+
     def project_convex_set(self,m):
         return self.ip_model.clip_model(m)
 
@@ -2292,9 +2520,10 @@ class Optimization:  # Inherits from BaseSimulation
         return Ws    
 
     def loss_func(self,m, beta, m_ref=None):
-        r = self.dpred(m)-self.dobs
-        r = self.Wd @ r
-        phid = 0.5 * np.dot(r,r)
+        # r = self.dpred(m)-self.dobs
+        # r = self.Wd @ r
+        r = self.Wd @(self.dpred(m)-self.dobs)
+        phid = np.dot(r,r)
         phim = 0
         if m_ref is not None:
             rms = self.Ws @ (m - m_ref)
@@ -3288,3 +3517,35 @@ def mesh_Pressure_Vessel(tx_radius,cs1,ncs1, pad1max,cs2,max,lim,pad2max):
     h2b = discretize.utils.unpack_widths([(cs2, npad2, pad2)])
     h = np.r_[h1a,h1bc,h2a,h2b]
     return h
+
+def sci_latex(v, prec=2):
+    s = f"{v:.{prec}e}"          # e.g. '3.00e-03'
+    mant, exp = s.split('e')     # '3.00', '-03'
+    exp = int(exp)               # remove leading zeros
+    if float(mant) == 0:
+        return "0"
+    if exp == 0:
+        return f"{mant}"
+    if exp != 0:
+        return rf"${mant}\cdot 10^{{{exp}}}$"
+
+
+def enforce_descending_x(ax):
+    x0, x1 = ax.get_xlim()
+    ax.set_xlim(max(x0, x1), min(x0, x1))
+    return ax
+
+def enforce_negative_up(ax):
+    y0, y1 = ax.get_ylim()
+    ax.set_ylim(max(y0, y1), min(y0, y1))
+    return ax
+def to_jsonable(x):
+    if isinstance(x, np.ndarray):
+        return x.tolist()
+    if isinstance(x, (np.integer, np.floating)):
+        return x.item()
+    if isinstance(x, dict):
+        return {k: to_jsonable(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [to_jsonable(v) for v in x]
+    return x
